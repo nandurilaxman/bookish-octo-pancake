@@ -1,0 +1,186 @@
+name: Split Swagger YAML
+
+on:
+  workflow_dispatch:
+
+jobs:
+  split-swagger:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '6.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore src/API/SampleApi.csproj
+
+    - name: Build project
+      run: dotnet build src/API/SampleApi.csproj --configuration Release --no-restore
+
+    - name: List build output
+      shell: bash
+      run: ls -la ${{ github.workspace }}/src/API/bin/Release/net6.0
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Install Python dependencies
+      shell: bash
+      run: pip install pyyaml
+
+    - name: Install dotnet swagger tool
+      shell: bash
+      run: dotnet tool install -g Swashbuckle.AspNetCore.Cli --version 6.2.3
+
+    - name: Split Swagger YAML by path
+      shell: bash
+      env:
+        PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+        HCP_DATAPLANE: ${{ vars.HCP_DATAPLANE }}
+        HCP_ENVIRONMENT: ${{ vars.HCP_ENVIRONMENT }}
+        HCP_NAMESPACE: ${{ vars.HCP_NAMESPACE }}
+        PROJECT_SERVICE_URL: ${{ vars.PROJECT_SERVICE_URL }}
+        HCP_URL_SUFFIXURL: ${{ vars.UPSTREAM_URL_SUFFIX }}
+        ENVIRONMENT: ${{ vars.ENV_DEPLOY }}
+        ARTIFACTORY_TAG: ${{ vars.ARTIFACTORY_TAG }}
+      run: |
+        python3 <<EOF
+        import os
+        import sys
+        import subprocess
+        import yaml
+        import zipfile
+        from collections import defaultdict
+        from pathlib import Path
+
+        project_name = os.environ.get("PROJECT_NAME").lower()
+        dataplane = os.environ.get("HCP_DATAPLANE")
+        hcp_environment = os.environ.get("HCP_ENVIRONMENT")
+        namespace = os.environ.get("HCP_NAMESPACE")
+        service_url = os.environ.get("PROJECT_SERVICE_URL")
+        upstream_urlsuffixurl = os.environ.get("HCP_URL_SUFFIXURL")
+        env = os.environ.get("ENVIRONMENT")
+        artifactory_tag = os.environ.get("ARTIFACTORY_TAG")
+        print("environment variable:", env)
+
+        api_version = "v1"
+        github_workspace = os.getenv("GITHUB_WORKSPACE", "")
+        print("GITHUB_WORKSPACE:", github_workspace)
+
+        apidll_path = github_workspace+"/src/API/bin/Release/net6.0/SampleApi.dll"
+        if not github_workspace:
+            print("GITHUB_WORKSPACE environment variable is not set.")
+            sys.exit(1)
+
+        swagger_output_dir = Path(github_workspace) / "outputYAML" / env
+        os.makedirs(swagger_output_dir, exist_ok=True)
+
+        swagger_output_file = project_name+".prm.yaml"
+        complete_filePath = os.path.join(swagger_output_dir, swagger_output_file)
+        print("swagger_output_file =", complete_filePath)
+
+        prefix = os.getenv("PREFIX_URL", "")
+
+        # Step 1: Generate swagger.yaml using dotnet CLI
+        try:
+            result = subprocess.run(["swagger", "tofile", "--output", complete_filePath, apidll_path, api_version], check=True, capture_output=True, text=True)
+            print("STDOUT:", result.stdout)
+            print("STDERR:", result.stderr)
+            print("Swagger YAML generated.")
+        except subprocess.CalledProcessError as e:
+            print("Command failed with return code:", e.returncode)
+            print("Standard Output:\n", e.stdout)
+            print("Standard Error:\n", e.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print("An unexpected error occurred:", str(e))
+            sys.exit(1)
+
+        with open(complete_filePath, "r") as f:
+            openapi = yaml.safe_load(f)
+
+        # Step 3: Group paths by common prefix
+        grouped_paths = defaultdict(dict)
+        if isinstance(openapi, dict) and "paths" in openapi:
+            for path, path_data in openapi["paths"].items():
+                if path.startswith("/api/"):
+                    path_parts = path.split("/")
+                    if len(path_parts) > 2:
+                        base_name_part = path_parts[2].lower()
+                        clean_base_name = f"{prefix}-{base_name_part}" if prefix else base_name_part
+                        trimmed_path = f"/api-{base_name_part}"
+                        remaining_part = path[len(trimmed_path):]
+                        # Use clean_base_name as the base path, append remaining part if it exists
+                        new_path = '/' + '/'.join(remaining_part.split('/')[1:] if remaining_part else '/'
+                        # if remaining_part and remaining_part != "/":
+                        #     new_path = f"/{clean_base_name}{remaining_part}"
+                        # else:
+                        #     new_path = f"/{clean_base_name}/"
+                        grouped_paths[clean_base_name][new_path] = path_data
+
+        # Step 4: Split by path
+        acctmgmtControllerdir = path(github_workspace) / "outputYaml" / env / "acctmgmtControllerdirYaml"
+        os.makedirs(acctmgmtControllerdir, exists_ok=True)
+        print(f"splitting files into separate files in '{acctmgmtControllerdir}' ...")
+        
+        for clean_base_name, paths in grouped_paths.items():
+            out_file = os.path.join(acctmgmtControllerdir, f"{project_name}-api-{clean_base_name}.yaml")
+            metadata = {
+                "metadata": {
+                    "name": f"oi-efr-npcentralus01-{project_name}-{clean_base_name}-{env}",
+                    "namespace": namespace,
+                },
+                "kind": f"federated-azure-apim.api.{api_version}",
+                "spec": {
+                    "env": hcp_environment,
+                    "apiName": f"{project_name}-{env}",
+                    "upstreamUrlSuffix": f"{upstream_urlsuffixurl}/api/{clean_base_name}",
+                    "openApiSpec": {
+                        "servers": [{"url": f"{service_url}/api/{clean_base_name}"}],
+                        "openapi": openapi.get("openapi", "3.0.0"),
+                        "info": openapi.get("info", {}),
+                        "components": openapi.get("components", {}),
+                        "paths": paths,
+                    },
+                },
+                "dataPlanes": [dataplane],
+                "upstreamEnv": env,
+                "catalogEnabled": True,
+                "dataSensitivity": False,
+                "subscriptionRequired": False,
+            }
+            print(f"SPLITTING PATHS INTO SEPARATE FILES IN '{swagger_output_dir}'...")
+            with open(out_file, "w") as f:
+                yaml.dump(metadata, f)
+
+        # os.remove(swagger_output_file)
+
+    - name: List generated YAML files
+      shell: bash
+      run: ls -la ${{ github.workspace }}/outputYAML/${{ vars.ENV_DEPLOY }}
+
+    - name: Checking zip
+      shell: bash
+      run: |
+        cd ${{ github.workspace }}/outputYAML/${{ vars.ENV_DEPLOY }}
+        zip -r ${{ github.workspace }}/${{ vars.HCP_FILE }}-${{ vars.ARTIFACTORY_TAG }}.zip .
+
+    - name: List zip file
+      shell: bash
+      run: ls -la ${{ github.workspace }}/${{ vars.HCP_FILE }}-${{ vars.ARTIFACTORY_TAG }}.zip
+
+    - name: Upload YAML to gitworkspace
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ vars.HCP_FILE }}-${{ vars.ARTIFACTORY_TAG }}.zip
+        path: ${{ github.workspace }}/${{ vars.HCP_FILE }}-${{ vars.ARTIFACTORY_TAG }}.zip
+        if-no-files-found: warn
+        compression-level: 6
+        overwrite: false
+        include-hidden-files: false
