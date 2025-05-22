@@ -125,8 +125,8 @@ jobs:
                         grouped_paths[clean_base_name][new_path] = path_data
 
         # Step 4: Split by path
-        acctmgmtControllerdir = path(github_workspace) / "outputYaml" / env / "acctmgmtControllerdirYaml"
-        os.makedirs(acctmgmtControllerdir, exists_ok=True)
+        acctmgmtControllerdir = Path(github_workspace) / "outputYAML" / env / "acctmgmtControllerdirYaml"
+        os.makedirs(acctmgmtControllerdir, exist_ok=True)
         print(f"splitting files into separate files in '{acctmgmtControllerdir}' ...")
         
         for clean_base_name, paths in grouped_paths.items():
