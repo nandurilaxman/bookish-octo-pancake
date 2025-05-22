@@ -116,7 +116,11 @@ jobs:
                         clean_base_name = f"{prefix}-{base_name_part}" if prefix else base_name_part
                         trimmed_path = f"/api-{base_name_part}"
                         remaining_part = path[len(trimmed_path):]
-                        new_path = f"/{clean_base_name}{remaining_part.split('/', 1)[1]}" if remaining_part else "/"
+                        # Use clean_base_name as the base path, append remaining part if it exists
+                        if remaining_part and remaining_part != "/":
+                            new_path = f"/{clean_base_name}{remaining_part}"
+                        else:
+                            new_path = f"/{clean_base_name}/"
                         grouped_paths[clean_base_name][new_path] = path_data
 
         # Step 4: Split by path
