@@ -21,6 +21,10 @@ jobs:
     - name: Build project
       run: dotnet build src/API/SampleApi.csproj --configuration Release --no-restore
 
+    - name: List build output
+      shell: bash
+      run: ls -la ${{ github.workspace }}/src/API/bin/Release/net6.0
+
     - name: Setup Python
       uses: actions/setup-python@v4
       with:
@@ -69,7 +73,7 @@ jobs:
         github_workspace = os.getenv("GITHUB_WORKSPACE", "")
         print("GITHUB_WORKSPACE:", github_workspace)
 
-        api_dll_path = github_workspace+"/src/API/bin/Release/net6.0/API.dll"
+        api_dll_path = github_workspace+"/src/API/bin/Release/net6.0/SampleApi.dll"
         if not github_workspace:
             print("GITHUB_WORKSPACE environment variable is not set.")
             sys.exit(1)
@@ -93,8 +97,10 @@ jobs:
             print("Command failed with return code:", e.returncode)
             print("Standard Output:\n", e.stdout)
             print("Standard Error:\n", e.stderr)
+            sys.exit(1)
         except Exception as e:
             print("An unexpected error occurred:", str(e))
+            sys.exit(1)
 
         with open(complete_filePath, "r") as f:
             openapi = yaml.safe_load(f)
@@ -107,7 +113,6 @@ jobs:
                     path_parts = path.split("/")
                     if len(path_parts) > 2:
                         base_name_part = path_parts[2].lower()
-                        #clean_base_name = f"{base_name}"
                         clean_base_name = f"{prefix}-{base_name_part}" if prefix else base_name_part
                         trimmed_path = f"/api-{base_name_part}"
                         remaining_part = path[len(trimmed_path):]
@@ -120,7 +125,7 @@ jobs:
             metadata = {
                 "metadata": {
                     "name": f"oi-efr-npcentralus01-{project_name}-{clean_base_name}-{env}",
-                    "namespace": namespace,
+                "namespace": namespace,
                 },
                 "kind": f"federated-azure-apim.api.{api_version}",
                 "spec": {
