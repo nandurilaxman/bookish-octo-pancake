@@ -125,7 +125,7 @@ jobs:
             metadata = {
                 "metadata": {
                     "name": f"oi-efr-npcentralus01-{project_name}-{clean_base_name}-{env}",
-                "namespace": namespace,
+                    "namespace": namespace,
                 },
                 "kind": f"federated-azure-apim.api.{api_version}",
                 "spec": {
@@ -160,10 +160,18 @@ jobs:
       shell: bash
       run: |
         cd ${{ github.workspace }}/outputYAML/${{ vars.ENV_DEPLOY }}
-        zip -r ${{ github.workspace }}/${{ vars.PROJECT_NAME }}-api-worklisttoprocess_yaml-${{ vars.ARTIFACTORY_TAG }}.zip .
+        zip -r ${{ github.workspace }}/${{ vars.HCP_FILE }}-${{ vars.ARTIFACTORY_TAG }}.zip .
+
+    - name: List zip file
+      shell: bash
+      run: ls -la ${{ github.workspace }}/${{ vars.HCP_FILE }}-${{ vars.ARTIFACTORY_TAG }}.zip
 
     - name: Upload YAML to gitworkspace
       uses: actions/upload-artifact@v4
       with:
         name: ${{ vars.HCP_FILE }}-${{ vars.ARTIFACTORY_TAG }}.zip
         path: ${{ github.workspace }}/${{ vars.HCP_FILE }}-${{ vars.ARTIFACTORY_TAG }}.zip
+        if-no-files-found: warn
+        compression-level: 6
+        overwrite: false
+        include-hidden-files: false
