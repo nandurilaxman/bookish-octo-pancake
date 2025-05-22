@@ -1,4 +1,4 @@
-name: Split Swagger YAML
+name: Split Swagger YAML updated
 
 on:
   workflow_dispatch:
@@ -117,7 +117,7 @@ jobs:
                         trimmed_path = f"/api-{base_name_part}"
                         remaining_part = path[len(trimmed_path):]
                         # Use clean_base_name as the base path, append remaining part if it exists
-                        new_path = '/' + '/'.join(remaining_part.split('/')[1:] if remaining_part else '/'
+                        new_path = '/' + '/'.join(remaining_part.split('/')[1:]) if remaining_part else '/'
                         # if remaining_part and remaining_part != "/":
                         #     new_path = f"/{clean_base_name}{remaining_part}"
                         # else:
