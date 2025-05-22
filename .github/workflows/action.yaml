@@ -2,34 +2,6 @@ name: Split Swagger YAML
 
 on:
   workflow_dispatch:
-    inputs:
-      project_name:
-        description: 'Project Name'
-        required: true
-      hcp_dataplane:
-        description: 'HCP Dataplane'
-        required: true
-      hcp_environment:
-        description: 'HCP Environment'
-        required: true
-      hcp_namespace:
-        description: 'HCP Namespace'
-        required: true
-      Project_ServiceURL:
-        description: 'Project Service URL'
-        required: true
-      UpstreamURLsuffix:
-        description: 'Upstream URL Suffix'
-        required: true
-      env_deploy:
-        description: 'Environment to Deploy'
-        required: true
-      hcpFile:
-        description: 'HCP File Name'
-        required: true
-      artifactorytag:
-        description: 'Artifactory Tag'
-        required: true
 
 jobs:
   split-swagger:
@@ -65,13 +37,14 @@ jobs:
     - name: Split Swagger YAML by path
       shell: bash
       env:
-        PROJECT_NAME: ${{ inputs.project_name }}
-        HCP_DATAPLANE: ${{ inputs.hcp_dataplane }}
-        HCP_ENVIRONMENT: ${{ inputs.hcp_environment }}
-        HCP_NAMESPACE: ${{ inputs.hcp_namespace }}
-        PROJECT_SERVICE_URL: ${{ inputs.Project_ServiceURL }}
-        HCP_URL_SUFFIXURL: ${{ inputs.UpstreamURLsuffix }}
-        ENVIRONMENT: ${{github.event.inputs.env_deploy }}
+        PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+        HCP_DATAPLANE: ${{ vars.HCP_DATAPLANE }}
+        HCP_ENVIRONMENT: ${{ vars.HCP_ENVIRONMENT }}
+        HCP_NAMESPACE: ${{ vars.HCP_NAMESPACE }}
+        PROJECT_SERVICE_URL: ${{ vars.PROJECT_SERVICE_URL }}
+        HCP_URL_SUFFIXURL: ${{ vars.UPSTREAM_URL_SUFFIX }}
+        ENVIRONMENT: ${{ vars.ENV_DEPLOY }}
+        ARTIFACTORY_TAG: ${{ vars.ARTIFACTORY_TAG }}
       run: |
         python3 <<EOF
         import os
@@ -174,21 +147,18 @@ jobs:
 
         # os.remove(swagger_output_file)
 
-    - name: Find API .dll in src/api
+    - name: List generated YAML files
       shell: bash
-      run: ls -la ${{ github.workspace }}/outputYAML/${{ github.event.inputs.env_deploy }}/acctmgmtControllerdirYaml
+      run: ls -la ${{ github.workspace }}/outputYAML/${{ vars.ENV_DEPLOY }}
 
     - name: Checking zip
       shell: bash
       run: |
-        cd /outputYAML/${{ github.event.inputs.env_deploy }}/acctmgmtControllerdirYaml
-        zip -r ${{ github.workspace }}/${{ inputs.project_name }}-api-worklisttoprocess_yaml-${{ inputs.artifactorytag }}.zip ./
+        cd ${{ github.workspace }}/outputYAML/${{ vars.ENV_DEPLOY }}
+        zip -r ${{ github.workspace }}/${{ vars.PROJECT_NAME }}-api-worklisttoprocess_yaml-${{ vars.ARTIFACTORY_TAG }}.zip .
 
     - name: Upload YAML to gitworkspace
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ inputs.hcpFile }}-${{ inputs.artifactorytag }}.zip
-        path: ${{ github.workspace }}/${{ inputs.hcpFile }}-${{ inputs.artifactorytag }}.zip
-
-    # - name: Debug split YAML files before cleanup
-    #   shell: bash
+        name: ${{ vars.HCP_FILE }}-${{ vars.ARTIFACTORY_TAG }}.zip
+        path: ${{ github.workspace }}/${{ vars.HCP_FILE }}-${{ vars.ARTIFACTORY_TAG }}.zip
